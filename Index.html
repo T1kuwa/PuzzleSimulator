@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Puzzle Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0a12;
+    --surface: #12121e;
+    --surface2: #1a1a2e;
+    --border: #2a2a4a;
+    --accent: #7c6fff;
+    --accent2: #4effc8;
+    --accent3: #ff6b9d;
+    --text: #e8e8ff;
+    --text-muted: #6868a0;
+    --filled: #5b4fe8;
+    --filled-glow: rgba(91,79,232,0.4);
+    --new-piece: #9b8fff;
+    --preview: rgba(155,143,255,0.35);
+    --grid-line: #1e1e3a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* 背景グリッド装飾 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+  }
+
+  /* ヘッダー */
+  header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(20px, 5vw, 32px);
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 4px;
+  }
+  header p {
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  /* パラメータパネル */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .panel-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ビームパラメータ */
+  .params {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .param-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .param-item label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 80px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .param-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    min-width: 16px;
+    text-align: center;
+  }
+
+  /* ビーム情報 */
+  #beam-info {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  #beam-info b { color: var(--accent2); font-weight: 500; }
+
+  /* ピース選択 */
+  .pieces-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .piece-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .piece-btn:hover {
+    border-color: var(--accent);
+    background: rgba(124,111,255,0.08);
+  }
+  .piece-btn.selected {
+    border-color: var(--accent);
+    background: rgba(124,111,255,0.15);
+    box-shadow: 0 0 16px rgba(124,111,255,0.3);
+  }
+  .piece-btn-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+  .piece-mini { border-collapse: collapse; }
+  .piece-mini td {
+    width: 13px;
+    height: 13px;
+    border: 1px solid var(--border);
+  }
+  .piece-mini td.on { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+  .piece-mini td.off { background: var(--surface); }
+
+  /* ヒント */
+  #place-hint {
+    min-height: 20px;
+    font-size: 13px;
+    color: var(--accent2);
+    font-weight: 500;
+    margin-bottom: 10px;
+    padding: 0 4px;
+    letter-spacing: 0.02em;
+  }
+
+  /* 完成メッセージ */
+  #complete-msg {
+    display: none;
+    padding: 12px 16px;
+    background: rgba(78,255,200,0.08);
+    border: 1px solid var(--accent2);
+    border-radius: 10px;
+    color: var(--accent2);
+    font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 14px;
+    text-align: center;
+    font-family: 'Orbitron', monospace;
+    letter-spacing: 0.05em;
+    animation: pulse-green 2s ease-in-out infinite;
+  }
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 10px rgba(78,255,200,0.2); }
+    50% { box-shadow: 0 0 24px rgba(78,255,200,0.5); }
+  }
+
+  /* スタッツ */
+  .stats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .stat {
+    flex: 1;
+    min-width: 80px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .stat-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .stat-val.accent { color: var(--accent); }
+  .stat-val.accent2 { color: var(--accent2); }
+
+  /* 2カラムレイアウト */
+  .two-col {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .left-col {
+    flex-shrink: 0;
+  }
+  .right-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ログ（右カラム下部に伸びる） */
+  .log {
+    flex: 1;
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* グリッド */
+  .grid-wrap { flex-shrink: 0; }
+  .grid-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .legend { display: flex; align-items: center; gap: 5px; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 2px;
+  }
+
+  table.grid { border-collapse: collapse; }
+  table.grid td {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    cursor: default;
+    transition: background 0.1s, box-shadow 0.1s;
+    position: relative;
+  }
+  td.empty { background: var(--surface2); }
+  td.filled {
+    background: var(--filled);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.3);
+  }
+  td.new-piece {
+    background: var(--new-piece);
+    box-shadow: 0 0 10px rgba(155,143,255,0.6);
+  }
+  /* ビームサーチ最適位置：緑 */
+  td.preview-best {
+    background: rgba(78,255,200,0.25);
+    box-shadow: inset 0 0 6px rgba(78,255,200,0.4);
+    border-color: rgba(78,255,200,0.5);
+  }
+  /* 手動プレビュー：赤 */
+  td.preview-user {
+    background: rgba(255,107,157,0.25);
+    box-shadow: inset 0 0 6px rgba(255,107,157,0.4);
+    border-color: rgba(255,107,157,0.5);
+  }
+  td.cursor-piece { cursor: pointer; }
+  td.cursor-piece:hover { filter: brightness(1.15); }
+
+  /* ボタン群 */
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    transition: all 0.15s;
+    font-family: 'Noto Sans JP', sans-serif;
+    letter-spacing: 0.02em;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--text); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+    box-shadow: 0 0 14px rgba(124,111,255,0.4);
+  }
+  .btn.primary:hover { background: #9b8fff; box-shadow: 0 0 20px rgba(124,111,255,0.6); }
+  .btn.primary:disabled { box-shadow: none; }
+
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-item {
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .log-item .move-num {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    margin-right: 6px;
+  }
+  .log-item .new-cells { color: var(--accent2); font-weight: 500; }
+
+  /* フッター */
+  footer {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* 進捗バー */
+  .progress-wrap {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  @media (max-width: 600px) {
+    table.grid td { width: 34px; height: 34px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>BLOCK PUZZLE SIMULATOR</h1>
+    <p>Beam Search · 7×7 Grid · Optimal Placement</p>
+  </header>
+
+  <div id="complete-msg"></div>
+
+  <div class="two-col">
+
+    <!-- 左カラム：グリッド -->
+    <div class="left-col">
+
+      <div id="place-hint"></div>
+
+      <!-- 進捗バー -->
+      <div class="progress-wrap"><div id="progress-bar" style="width:0%"></div></div>
+
+      <!-- グリッド -->
+      <div class="grid-wrap">
+        <div class="grid-label">
+          <span class="legend"><span class="legend-dot" style="background:#9b8fff;box-shadow:0 0 6px #9b8fff"></span>今の配置</span>
+          <span class="legend"><span class="legend-dot" style="background:#5b4fe8"></span>既存</span>
+          <span class="legend"><span class="legend-dot" style="background:rgba(78,255,200,0.35);border:1px solid rgba(78,255,200,0.5)"></span>最適位置</span>
+          <span class="legend"><span class="legend-dot" style="background:rgba(255,107,157,0.35);border:1px solid rgba(255,107,157,0.5)"></span>手動プレビュー</span>
+        </div>
+        <table class="grid" id="main-grid"></table>
+        <div class="btn-row">
+          <button class="btn primary" id="btn-place" onclick="placeNow()" disabled>▶ 最適位置に配置</button>
+          <button class="btn" onclick="undoLast()">↩ 戻す</button>
+          <button class="btn" onclick="resetAll()">リセット</button>
+          <button class="btn" id="btn-auto" onclick="toggleAuto()" style="border-color:var(--accent2);color:var(--accent2)">🎲 ランダム自動配置</button>
+        </div>
+      </div>
+
+      <!-- ピース選択（ボタンの下） -->
+      <div class="panel" style="margin-top:12px">
+        <div class="panel-title">出現したピースを選択</div>
+        <div class="pieces-row" id="pieces-row"></div>
+      </div>
+    </div>
+
+    <!-- 右カラム：ステータス・スタッツ・ログ -->
+    <div class="right-col">
+
+      <!-- ビームパラメータ -->
+      <div class="panel">
+        <div class="panel-title">Beam Search Parameters</div>
+        <div class="params">
+          <div class="param-item">
+            <label>ビーム幅</label>
+            <input type="range" min="1" max="10" value="5" id="beam-width"
+              oninput="document.getElementById('bw-val').textContent=this.value">
+            <span class="param-val" id="bw-val">5</span>
+          </div>
+          <div class="param-item">
+            <label>先読み深さ</label>
+            <input type="range" min="1" max="4" value="3" id="beam-depth"
+              oninput="document.getElementById('bd-val').textContent=this.value">
+            <span class="param-val" id="bd-val">3</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ビームステータス -->
+      <div class="panel">
+        <div class="panel-title">Beam Search Status</div>
+        <div id="beam-info">ピースを選択するとビームサーチを実行します</div>
+      </div>
+
+      <!-- スタッツ -->
+      <div class="stats">
+        <div class="stat"><div class="stat-label">手数</div><div class="stat-val accent" id="stat-moves">0</div></div>
+        <div class="stat"><div class="stat-label">埋まったマス</div><div class="stat-val" id="stat-cells">0 / 49</div></div>
+        <div class="stat"><div class="stat-label">充填率</div><div class="stat-val accent2" id="stat-pct">0%</div></div>
+        <div class="stat"><div class="stat-label">今手の新規マス</div><div class="stat-val" id="stat-new">-</div></div>
+        <div class="stat"><div class="stat-label">ビームスコア</div><div class="stat-val" id="stat-score">-</div></div>
+      </div>
+
+      <!-- ログ -->
+      <div class="panel-title" style="margin-bottom:8px;margin-top:4px">PLACEMENT LOG</div>
+      <div class="log" id="log"></div>
+
+    </div>
+  </div>
+
+  <footer>BLOCK PUZZLE SIMULATOR &nbsp;·&nbsp; Beam Search Algorithm &nbsp;·&nbsp; 7×7 Grid</footer>
+</div>
+
+<script>
+const PIECES = [
+  { name: "縦I(7)",  center: [3,0], noOverlap: true,  cells: [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0]] },
+  { name: "3×3",    center: [1,1], noOverlap: true,  cells: [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]] },
+  { name: "横I(7)", center: [0,3], noOverlap: true,  cells: [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6]] },
+  { name: "十字",    center: [1,1], noOverlap: false, cells: [[0,1],[1,0],[1,1],[1,2],[2,1]] },
+  { name: "X",      center: [1,1], noOverlap: false, cells: [[0,0],[0,2],[1,1],[2,0],[2,2]] }
+];
+
+const N = 7;
+let grid = Array.from({ length: N }, () => Array(N).fill(0));
+let history = [];
+let moveCount = 0;
+let selectedPieceIdx = null;
+let bestPos = null;
+let previewPos = null;
+let lastPlacement = null;
+let beamResult = null;
+
+function getBounds(cells) {
+  let mr = 0, mc = 0;
+  cells.forEach(([r, c]) => { if (r > mr) mr = r; if (c > mc) mc = c; });
+  return { rows: mr + 1, cols: mc + 1 };
+}
+
+function countFilled() {
+  let f = 0;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c] > 0) f++;
+  return f;
+}
+
+function countFilledG(g) {
+  let f = 0;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (g[r][c] > 0) f++;
+  return f;
+}
+
+// はみ出し対応: グリッド内セルのみカウント
+function calcNewOverflow(g, cells, r, c) {
+  let n = 0;
+  cells.forEach(([dr, dc]) => {
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < N && nc >= 0 && nc < N && g[nr][nc] === 0) n++;
+  });
+  return n;
+}
+
+function calcNew(g, cells, r, c) {
+  let n = 0;
+  cells.forEach(([dr, dc]) => { if (g[r + dr][c + dc] === 0) n++; });
+  return n;
+}
+
+function evalGrid(g) {
+  const filled = countFilledG(g);
+
+  // 連結した空き領域をBFSで検出し、小さい領域に強いペナルティ
+  const visited = Array.from({length: N}, () => Array(N).fill(false));
+  let penalty = 0;
+  for (let sr = 0; sr < N; sr++) {
+    for (let sc = 0; sc < N; sc++) {
+      if (g[sr][sc] === 0 && !visited[sr][sc]) {
+        const queue = [[sr, sc]];
+        visited[sr][sc] = true;
+        let size = 0;
+        while (queue.length) {
+          const [r, c] = queue.shift();
+          size++;
+          for (const [nr, nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]) {
+            if (nr >= 0 && nr < N && nc >= 0 && nc < N && !visited[nr][nc] && g[nr][nc] === 0) {
+              visited[nr][nc] = true;
+              queue.push([nr, nc]);
+            }
+          }
+        }
+        // newCells*50のスケールに合わせて強いペナルティ
+        if (size === 1) penalty += 150;  // 孤立1マス＝絶対に埋められない
+        else if (size === 2) penalty += 80;
+        else if (size <= 4) penalty += 40;
+        else if (size <= 6) penalty += 15;
+      }
+    }
+  }
+
+  return filled * 10 - penalty;
+}
+
+function allPlacements(g, pi) {
+  const piece = PIECES[pi];
+  const cells = piece.cells;
+  const [cr, cc] = piece.center;
+  const { rows, cols } = getBounds(cells);
+  const result = [];
+  for (let r = -(rows - 1); r < N; r++) {
+    for (let c = -(cols - 1); c < N; c++) {
+      // 中心セルがグリッド内に収まること
+      const centerR = r + cr, centerC = c + cc;
+      if (centerR < 0 || centerR >= N || centerC < 0 || centerC >= N) continue;
+      // グリッド内の空きマスに1つ以上当たること
+      const newCells = calcNewOverflow(g, cells, r, c);
+      if (newCells === 0) continue;
+      result.push({ r, c, newCells });
+    }
+  }
+  return result;
+}
+
+function applyToGrid(g, pi, r, c) {
+  const ng = g.map(row => [...row]);
+  PIECES[pi].cells.forEach(([dr, dc]) => {
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < N && nc >= 0 && nc < N) ng[nr][nc] = 1;
+  });
+  return ng;
+}
+
+function beamFuture(g, beamWidth, depth) {
+  if (depth === 0) return evalGrid(g);
+  if (countFilledG(g) === 49) return 490;
+  let totalExpected = 0;
+  PIECES.forEach((_, pi) => {
+    const placements = allPlacements(g, pi);
+    if (placements.length === 0) { totalExpected += evalGrid(g); return; }
+    const candidates = placements
+      .map(({ r, c, newCells }) => {
+        const ng = applyToGrid(g, pi, r, c);
+        return { r, c, newCells, ng, immediateScore: newCells * 50 + evalGrid(ng) };
+      })
+      .sort((a, b) => b.immediateScore - a.immediateScore)
+      .slice(0, beamWidth);
+    const best = candidates.reduce((mx, cand) => {
+      const s = cand.newCells * 50 + beamFuture(cand.ng, beamWidth, depth - 1);
+      return s > mx ? s : mx;
+    }, -Infinity);
+    totalExpected += best;
+  });
+  return totalExpected / PIECES.length;
+}
+
+function beamSearch(g, pieceIdx, beamWidth, depth) {
+  const placements = allPlacements(g, pieceIdx);
+  if (placements.length === 0) return null;
+
+  // 終盤モード：残り空きマス数がピースのセル数以下なら先読みせずnewCells最大を選ぶ
+  const emptyCells = N * N - countFilledG(g);
+  const pieceSize = PIECES[pieceIdx].cells.length;
+  if (emptyCells <= pieceSize) {
+    placements.sort((a, b) => b.newCells - a.newCells);
+    const best = placements[0];
+    return { r: best.r, c: best.c, newCells: best.newCells, totalScore: best.newCells * 50 };
+  }
+
+  const scored = placements.map(({ r, c, newCells }) => {
+    const ng = applyToGrid(g, pieceIdx, r, c);
+    const futureScore = depth > 1 ? beamFuture(ng, beamWidth, depth - 1) : evalGrid(ng);
+    return { r, c, newCells, totalScore: newCells * 50 + futureScore };
+  });
+  scored.sort((a, b) => b.totalScore - a.totalScore);
+  return scored[0];
+}
+
+function getBW() { return parseInt(document.getElementById('beam-width').value); }
+function getBD() { return parseInt(document.getElementById('beam-depth').value); }
+
+function runBeam(idx) {
+  const bw = getBW(), bd = getBD();
+  const t0 = performance.now();
+  const res = beamSearch(grid, idx, bw, bd);
+  const ms = Math.round(performance.now() - t0);
+  beamResult = res;
+  if (res) {
+    const newC = calcNewOverflow(grid, PIECES[idx].cells, res.r, res.c);
+    document.getElementById('place-hint').textContent =
+      '最適位置: 行' + res.r + ' 列' + res.c + ' — 今手 +' + newC + 'マス　ビームスコア: ' + Math.round(res.totalScore);
+    document.getElementById('stat-score').textContent = Math.round(res.totalScore);
+    document.getElementById('beam-info').innerHTML =
+      '<b>計算完了</b>　ビーム幅: ' + bw + '　先読み: ' + bd + '手　' +
+      '各手で全5種想定 → 上位' + bw + '候補を' + bd + '手先まで展開　<b>' + ms + 'ms</b>';
+    updatePreviewDisplay();
+  }
+}
+
+function renderPieces() {
+  const row = document.getElementById('pieces-row');
+  row.innerHTML = '';
+  PIECES.forEach((p, i) => {
+    const { rows, cols } = getBounds(p.cells);
+    const div = document.createElement('div');
+    div.className = 'piece-btn' + (selectedPieceIdx === i ? ' selected' : '');
+    div.onclick = () => selectPiece(i);
+    const lbl = document.createElement('div');
+    lbl.className = 'piece-btn-label';
+    lbl.textContent = p.name;
+    div.appendChild(lbl);
+    const tbl = document.createElement('table');
+    tbl.className = 'piece-mini';
+    for (let r = 0; r < rows; r++) {
+      const tr = document.createElement('tr');
+      for (let c = 0; c < cols; c++) {
+        const td = document.createElement('td');
+        td.className = p.cells.some(([pr, pc]) => pr === r && pc === c) ? 'on' : 'off';
+        tr.appendChild(td);
+      }
+      tbl.appendChild(tr);
+    }
+    div.appendChild(tbl);
+    row.appendChild(div);
+  });
+}
+
+function selectPiece(idx) {
+  selectedPieceIdx = idx;
+  previewPos = null;
+  beamResult = null;
+  document.getElementById('btn-place').disabled = false;
+  document.getElementById('beam-info').textContent = 'ビームサーチ計算中...';
+  document.getElementById('place-hint').textContent = '';
+  renderPieces();
+  renderGrid();
+  setTimeout(() => runBeam(idx), 20);
+}
+
+function renderGrid() {
+  const tbl = document.getElementById('main-grid');
+  tbl.innerHTML = '';
+
+  const newSet = new Set();
+  if (lastPlacement) lastPlacement.cells.forEach(([r, c]) => {
+    const nr = lastPlacement.r + r, nc = lastPlacement.c + c;
+    if (nr >= 0 && nr < N && nc >= 0 && nc < N) newSet.add(nr * N + nc);
+  });
+
+  const previewSet = new Set();
+  if (previewPos !== null && selectedPieceIdx !== null)
+    PIECES[selectedPieceIdx].cells.forEach(([dr, dc]) => {
+      const nr = previewPos.r + dr, nc = previewPos.c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N) previewSet.add(nr * N + nc);
+    });
+
+  const bestSet = new Set();
+  if (beamResult !== null && selectedPieceIdx !== null && previewPos === null)
+    PIECES[selectedPieceIdx].cells.forEach(([dr, dc]) => {
+      const nr = beamResult.r + dr, nc = beamResult.c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N) bestSet.add(nr * N + nc);
+    });
+
+  for (let r = 0; r < N; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < N; c++) {
+      const td = document.createElement('td');
+      const key = r * N + c;
+      const isFilled = grid[r][c] > 0;
+      if (!isFilled && previewSet.has(key))   td.className = 'preview-user';
+      else if (!isFilled && bestSet.has(key)) td.className = 'preview-best';
+      else if (newSet.has(key))               td.className = 'new-piece';
+      else if (isFilled)                      td.className = 'filled';
+      else                                    td.className = 'empty';
+
+      if (selectedPieceIdx !== null) {
+        td.classList.add('cursor-piece');
+        td.onmouseenter = () => {
+          const cells = PIECES[selectedPieceIdx].cells;
+          const [cr, cc] = PIECES[selectedPieceIdx].center;
+          const pr = r - cr;
+          const pc = c - cc;
+          previewPos = { r: pr, c: pc };
+          const sc = calcNewOverflow(grid, cells, pr, pc);
+          const centerOut = (pr + cr < 0 || pr + cr >= N || pc + cc < 0 || pc + cc >= N);
+          const noNew = sc === 0;
+          const bsc = beamResult ? Math.round(beamResult.totalScore) : '-';
+          document.getElementById('place-hint').textContent =
+            (centerOut ? '⚠ 中心がグリッド外 — 配置不可　|　'
+              : noNew ? '⚠ 空きマスなし — 配置不可　|　'
+              : 'プレビュー: 行' + pr + ' 列' + pc + ' +' + sc + 'マス　|　') +
+            '最適(ビーム): 行' + (beamResult ? beamResult.r : '-') + ' 列' + (beamResult ? beamResult.c : '-') + ' スコア: ' + bsc;
+          updatePreviewDisplay();
+        };
+        td.onmouseleave = () => {
+          previewPos = null;
+          if (beamResult) {
+            const newC = calcNewOverflow(grid, PIECES[selectedPieceIdx].cells, beamResult.r, beamResult.c);
+            document.getElementById('place-hint').textContent =
+              '最適位置: 行' + beamResult.r + ' 列' + beamResult.c + ' — 今手 +' + newC + 'マス　ビームスコア: ' + Math.round(beamResult.totalScore);
+          }
+          updatePreviewDisplay();
+        };
+        td.onclick = () => {
+          const [cr, cc] = PIECES[selectedPieceIdx].center;
+          const pr = r - cr;
+          const pc = c - cc;
+          confirmPlace(pr, pc);
+        };
+      }
+      tr.appendChild(td);
+    }
+    tbl.appendChild(tr);
+  }
+  updateStats();
+}
+
+function updatePreviewDisplay() {
+  const tbl = document.getElementById('main-grid');
+  const rows = tbl.querySelectorAll('tr');
+
+  const newSet = new Set();
+  if (lastPlacement) lastPlacement.cells.forEach(([dr, dc]) => {
+    const nr = lastPlacement.r + dr, nc = lastPlacement.c + dc;
+    if (nr >= 0 && nr < N && nc >= 0 && nc < N) newSet.add(nr * N + nc);
+  });
+
+  const previewSet = new Set();
+  if (previewPos !== null && selectedPieceIdx !== null)
+    PIECES[selectedPieceIdx].cells.forEach(([dr, dc]) => {
+      const nr = previewPos.r + dr, nc = previewPos.c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N) previewSet.add(nr * N + nc);
+    });
+
+  const bestSet = new Set();
+  if (beamResult !== null && selectedPieceIdx !== null && previewPos === null)
+    PIECES[selectedPieceIdx].cells.forEach(([dr, dc]) => {
+      const nr = beamResult.r + dr, nc = beamResult.c + dc;
+      if (nr >= 0 && nr < N && nc >= 0 && nc < N) bestSet.add(nr * N + nc);
+    });
+
+  for (let r = 0; r < N; r++) {
+    const tds = rows[r].querySelectorAll('td');
+    for (let c = 0; c < N; c++) {
+      const td = tds[c];
+      const key = r * N + c;
+      const isFilled = grid[r][c] > 0;
+      let cls;
+      if (!isFilled && previewSet.has(key))   cls = 'preview-user';
+      else if (!isFilled && bestSet.has(key)) cls = 'preview-best';
+      else if (newSet.has(key))               cls = 'new-piece';
+      else if (isFilled)                      cls = 'filled';
+      else                                    cls = 'empty';
+      if (selectedPieceIdx !== null) cls += ' cursor-piece';
+      td.className = cls;
+    }
+  }
+}
+
+
+function updateStats() {
+  const f = countFilled();
+  document.getElementById('stat-moves').textContent = moveCount;
+  document.getElementById('stat-cells').textContent = f + ' / 49';
+  document.getElementById('stat-pct').textContent = Math.round(f / 49 * 100) + '%';
+  document.getElementById('progress-bar').style.width = Math.round(f / 49 * 100) + '%';
+}
+
+function placeNow() {
+  if (!beamResult || selectedPieceIdx === null) return;
+  confirmPlace(beamResult.r, beamResult.c);
+}
+
+function confirmPlace(r, c) {
+  if (selectedPieceIdx === null) return;
+  const cells = PIECES[selectedPieceIdx].cells;
+  const [cr, cc] = PIECES[selectedPieceIdx].center;
+  // 中心セルがグリッド内に収まること
+  if (r + cr < 0 || r + cr >= N || c + cc < 0 || c + cc >= N) return;
+  // グリッド内の空きマスに1つ以上当たること
+  if (calcNewOverflow(grid, cells, r, c) === 0) return;
+
+  history.push({
+    grid: grid.map(row => [...row]),
+    moves: moveCount,
+    last: lastPlacement ? JSON.parse(JSON.stringify(lastPlacement)) : null
+  });
+
+  const newCells = calcNewOverflow(grid, cells, r, c);
+  cells.forEach(([dr, dc]) => {
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < N && nc >= 0 && nc < N) grid[nr][nc] = 1;
+  });
+  lastPlacement = { r, c, cells: JSON.parse(JSON.stringify(cells)) };
+  moveCount++;
+
+  addLog(PIECES[selectedPieceIdx].name, r, c, newCells);
+  document.getElementById('stat-new').textContent = '+' + newCells;
+
+  selectedPieceIdx = null; beamResult = null; previewPos = null;
+  document.getElementById('btn-place').disabled = true;
+  document.getElementById('place-hint').textContent = '';
+  document.getElementById('beam-info').textContent = '次のピースを選択してください';
+
+  renderPieces();
+  renderGrid();
+
+  if (countFilled() === 49) {
+    document.getElementById('complete-msg').style.display = 'block';
+    document.getElementById('complete-msg').textContent =
+      'COMPLETE!　' + moveCount + ' 手で 49 / 49 マス達成';
+  }
+}
+
+function addLog(name, r, c, newCells) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-item';
+  const bw = getBW(), bd = getBD();
+  div.innerHTML =
+    '<span class="move-num">' + moveCount + '</span>' +
+    name + ' → 行' + r + ' 列' + c +
+    ' <span class="new-cells">+' + newCells + 'マス</span>' +
+    ' <span style="font-size:10px;color:var(--text-muted)">[BW=' + bw + ' D=' + bd + ']</span>';
+  log.prepend(div);
+}
+
+function undoLast() {
+  if (!history.length) return;
+  const snap = history.pop();
+  grid = snap.grid; moveCount = snap.moves; lastPlacement = snap.last;
+  selectedPieceIdx = null; beamResult = null; previewPos = null;
+  document.getElementById('btn-place').disabled = true;
+  document.getElementById('place-hint').textContent = '';
+  document.getElementById('complete-msg').style.display = 'none';
+  document.getElementById('beam-info').textContent = '次のピースを選択してください';
+  const log = document.getElementById('log');
+  if (log.firstChild) log.removeChild(log.firstChild);
+  renderPieces(); renderGrid();
+}
+
+function resetAll() {
+  grid = Array.from({ length: N }, () => Array(N).fill(0));
+  history = []; moveCount = 0; lastPlacement = null;
+  selectedPieceIdx = null; beamResult = null; previewPos = null;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('complete-msg').style.display = 'none';
+  document.getElementById('stat-new').textContent = '-';
+  document.getElementById('stat-score').textContent = '-';
+  document.getElementById('btn-place').disabled = true;
+  document.getElementById('place-hint').textContent = '';
+  document.getElementById('beam-info').textContent = 'ピースを選択するとビームサーチを実行します';
+  renderPieces(); renderGrid();
+}
+
+renderPieces();
+renderGrid();
+
+// ランダム自動配置
+let autoTimer = null;
+
+function toggleAuto() {
+  if (autoTimer) {
+    stopAuto();
+  } else {
+    autoRandom();
+  }
+}
+
+function autoRandom() {
+  if (autoTimer) return;
+  const btn = document.getElementById('btn-auto');
+  btn.textContent = '⏹ 停止';
+  btn.style.borderColor = 'var(--accent3)';
+  btn.style.color = 'var(--accent3)';
+  autoStep();
+}
+
+function stopAuto() {
+  if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  const btn = document.getElementById('btn-auto');
+  btn.textContent = '🎲 ランダム自動配置';
+  btn.style.borderColor = 'var(--accent2)';
+  btn.style.color = 'var(--accent2)';
+  selectedPieceIdx = null; beamResult = null; previewPos = null;
+  document.getElementById('btn-place').disabled = true;
+  document.getElementById('beam-info').textContent = '次のピースを選択してください';
+  renderPieces(); renderGrid();
+}
+
+function autoStep() {
+  if (countFilled() === 49) { stopAuto(); return; }
+
+  // ランダムにピースを選択（テスト用：ピース選択はランダム、位置だけビームサーチ）
+  const pi = Math.floor(Math.random() * PIECES.length);
+  const res = beamSearch(grid, pi, getBW(), getBD());
+
+  if (!res) {
+    // 選んだピースが置けない → 詰みチェック（全ピース試す）
+    const anyPlaceable = PIECES.some((_, idx) => beamSearch(grid, idx, getBW(), getBD()) !== null);
+    if (!anyPlaceable) {
+      stopAuto();
+      document.getElementById('beam-info').innerHTML =
+        '<b style="color:var(--accent3)">⚠ 全ピースで配置不可 — 詰み状態</b>';
+      return;
+    }
+    // まだ置けるピースはある → このステップをスキップして次へ
+    autoTimer = setTimeout(autoStep, 50);
+    return;
+  }
+
+  selectedPieceIdx = pi;
+  beamResult = res;
+  renderPieces();
+
+  // プレビュー表示してから配置
+  renderGrid();
+  autoTimer = setTimeout(() => {
+    confirmPlace(res.r, res.c);
+    autoTimer = setTimeout(() => {
+      if (countFilled() === 49) { stopAuto(); return; }
+      autoStep();
+    }, 400);
+  }, 600);
+}
+</script>
+</body>
+</html>
